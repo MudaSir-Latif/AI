@@ -1,143 +1,58 @@
-import numpy as np
+import numpy as np 
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import MinMaxScaler,StandardScaler,OrdinalEncoder,OneHotEncoder
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import accuracy_score,classification_report
 
-def sigmoid(z):
-    return 1/(1 + np.exp(-z))
+df=pd.read_csv('car data.csv')
+print("No of Data rows :",df.shape[0])
 
-def initialize_parameters(n_x, n_h, n_y):
-    W1 = np.random.randn(n_h, n_x)
-    b1 = np.zeros((n_h, 1))
-    W2 = np.random.randn(n_y, n_h)
-    b2 = np.zeros((n_y, 1))
+#Normalization
+scaler=MinMaxScaler()
+df[['Present_Price']]=scaler.fit_transform(df[['Present_Price']])
 
-    parameters = {
-        "W1": W1,
-        "b1" : b1,
-        "W2": W2,
-        "b2" : b2
-    }
-    return parameters
+#Standardization
+standard_scaler=StandardScaler()
+df[['Year','Kms_Driven']]=standard_scaler.fit_transform(df[['Year','Kms_Driven']])
 
-def forward_prop(X, parameters):
-    W1 = parameters["W1"]
-    b1 = parameters["b1"]
-    W2 = parameters["W2"]
-    b2 = parameters["b2"]
+#One Hot Encoding
+one_hot_encoder=OneHotEncoder(sparse_output=False).set_output(transform="pandas")
 
-    Z1 = np.dot(W1, X) + b1
-    A1 = np.tanh(Z1)
-    Z2 = np.dot(W2, A1) + b2
-    A2 = sigmoid(Z2)
+df=pd.concat([
+    df.drop(columns=['Fuel_Type','Seller_Type']),
+    one_hot_encoder.fit_transform(df[['Fuel_Type','Seller_Type']])
+],axis=1)
 
-    cache = {
-        "A1": A1,
-        "A2": A2
-    }
-    return A2, cache
+# Ordinal Encoding
+ordinal_encoder = OrdinalEncoder(categories=[['Manual', 'Automatic']])
+df['Transmission'] = ordinal_encoder.fit_transform(df[['Transmission']])
 
-def calculate_cost(A2, Y):
-    cost = -np.sum(np.multiply(Y, np.log(A2)) +  np.multiply(1-Y, np.log(1-A2)))/m
-    cost = np.squeeze(cost)
+#Bining
+df['Price_Category']=pd.qcut(df['Selling_Price'],q=3,labels=False)
 
-    return cost
+#Scaling
+df['Selling_Price']=scaler.fit_transform(df[['Selling_Price']])
 
-def backward_prop(X, Y, cache, parameters):
-    A1 = cache["A1"]
-    A2 = cache["A2"]
+df.to_csv('processed_data.csv',index=False)
 
-    W2 = parameters["W2"]
+X=df.drop(['Car_Name','Selling_Price','Price_Category'],axis=1)
+y=df['Price_Category']
 
-    dZ2 = A2 - Y
-    dW2 = np.dot(dZ2, A1.T)/m
-    db2 = np.sum(dZ2, axis=1, keepdims=True)/m
-    dZ1 = np.multiply(np.dot(W2.T, dZ2), 1-np.power(A1, 2))
-    dW1 = np.dot(dZ1, X.T)/m
-    db1 = np.sum(dZ1, axis=1, keepdims=True)/m
+X_train,X_test,y_train,y_test=train_test_split(X,y,test_size=0.2)
 
-    grads = {
-        "dW1": dW1,
-        "db1": db1,
-        "dW2": dW2,
-        "db2": db2
-    }
+print("No of Training rows :",X_train.shape[0])
+print("No of Testing rows :",X_test.shape[0])
 
-    return grads
+mlp_classifier=MLPClassifier(hidden_layer_sizes=(100,),max_iter=1000)
 
-def update_parameters(parameters, grads, learning_rate):
-    W1 = parameters["W1"]
-    b1 = parameters["b1"]
-    W2 = parameters["W2"]
-    b2 = parameters["b2"]
+mlp_classifier.fit(X_train,y_train)
 
-    dW1 = grads["dW1"]
-    db1 = grads["db1"]
-    dW2 = grads["dW2"]
-    db2 = grads["db2"]
+y_pred=mlp_classifier.predict(X_test)
 
-    W1 = W1 - learning_rate*dW1
-    b1 = b1 - learning_rate*db1
-    W2 = W2 - learning_rate*dW2
-    b2 = b2 - learning_rate*db2
-    
-    new_parameters = {
-        "W1": W1,
-        "W2": W2,
-        "b1" : b1,
-        "b2" : b2
-    }
-
-    return new_parameters
-
-
-def model(X, Y, n_x, n_h, n_y, num_of_iters, learning_rate):
-    parameters = initialize_parameters(n_x, n_h, n_y)
-
-    for i in range(0, num_of_iters+1):
-        a2, cache = forward_prop(X, parameters)
-
-        cost = calculate_cost(a2, Y)
-
-        grads = backward_prop(X, Y, cache, parameters)
-
-        parameters = update_parameters(parameters, grads, learning_rate)
-
-        if(i%100 == 0):
-            print('Cost after iteration# {:d}: {:f}'.format(i, cost))
-
-    return parameters
-
-def predict(X, parameters):
-    a2, cache = forward_prop(X, parameters)
-    yhat = a2
-    yhat = np.squeeze(yhat)
-    if(yhat >= 0.5):
-        y_predict = 1
-    else:
-        y_predict = 0
-
-    return y_predict
-    
-
-
-np.random.seed(2)
-
-X = np.array([[0, 0, 1, 1], [0, 1, 0, 1]])
-
-Y = np.array([[0, 1, 1, 0]])
-
-m = X.shape[1]
-
-n_x = 2   
-n_h = 2    
-n_y = 1     
-num_of_iters = 1000
-learning_rate = 0.3
-
-trained_parameters = model(X, Y, n_x, n_h, n_y, num_of_iters, learning_rate)
-
-
-X_test = np.array([[1], [1]])
-
-y_predict = predict(X_test, trained_parameters)
-
-print('Neural Network prediction for example ({:d}, {:d}) is {:d}'.format(
-    X_test[0][0], X_test[1][0], y_predict))
+print("Hidden Layer Size:",mlp_classifier.hidden_layer_sizes)
+print("Number of Layers:",mlp_classifier.n_layers_)
+print("Number of Iterations:",mlp_classifier.n_iter_)
+print("Classes :",mlp_classifier.classes_)
+print("Accuracy :",accuracy_score(y_test,y_pred))
+print(classification_report(y_test,y_pred))
